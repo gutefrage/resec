@@ -54,13 +54,15 @@ func (m *Manager) registerMaster() {
 		return
 	}
 
-	// check if already registered
-	if b, _, err := m.zkConn.Exists(m.registeredPath); err != nil {
-		m.logger.Errorf("Failed to check existing path %s in zk: %v", m.registeredPath, err)
-		return
-	} else if b {
-		m.logger.Debugf("Already registered in zk: %v", m.registeredPath)
-		return
+	// check if already registered, if exists
+	if m.registeredPath != "" {
+		if b, _, err := m.zkConn.Exists(m.registeredPath); err != nil {
+			m.logger.Errorf("Failed to check existing path %s in zk: %v", m.registeredPath, err)
+			return
+		} else if b {
+			m.logger.Debugf("Already registered in zk: %v", m.registeredPath)
+			return
+		}
 	}
 
 	// prepare data

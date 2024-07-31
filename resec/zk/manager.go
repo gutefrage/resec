@@ -46,12 +46,7 @@ func (m *Manager) registerMaster() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.logger.Debugf("registerMaster: %p %s", m, m.registeredPath)
-	if m.registeredPath != "" {
-		m.logger.Info("zk master already registered")
-		return
-	}
-
+	// parent path should exists
 	zkPath := m.zkBasePath
 	err := zkEnsurePath(m.zkConn, zkPath)
 	if err != nil {
@@ -59,6 +54,16 @@ func (m *Manager) registerMaster() {
 		return
 	}
 
+	// check if already registered
+	if b, _, err := m.zkConn.Exists(m.registeredPath); err != nil {
+		m.logger.Errorf("Failed to check existing path %s in zk: %v", m.registeredPath, err)
+		return
+	} else if b {
+		m.logger.Debugf("Already registered in zk: %v", m.registeredPath)
+		return
+	}
+
+	// prepare data
 	data, err := json.Marshal(map[string]interface{}{
 		"serviceEndpoint": map[string]interface{}{
 			"host": m.redisHost,
@@ -68,19 +73,22 @@ func (m *Manager) registerMaster() {
 		"status":              "ALIVE",
 	})
 	if err != nil {
-		m.logger.Errorf("Failed to ensure path in zk: %v", err)
+		m.logger.Errorf("Failed to marshal json: %v", err)
 		return
 	}
 
+	// register
 	memberPath := fmt.Sprintf("%s/member_", zkPath)
-	path, err := m.zkConn.Create(memberPath, []byte(data), zkapi.FlagSequence|zkapi.FlagEphemeral, zkPermission)
+	registeredPath, err := m.zkConn.Create(memberPath, []byte(data), zkapi.FlagSequence|zkapi.FlagEphemeral, zkPermission)
 	if err != nil {
 		m.logger.Errorf("Failed creating member %s in zookeeper: %v", memberPath, err)
 		return
 	}
 
-	m.logger.Infof("Registered Master: %s", path)
-	m.registeredPath = path
+	if registeredPath != m.registeredPath {
+		m.logger.Infof("Registered Master: %s", registeredPath)
+		m.registeredPath = registeredPath
+	}
 }
 
 // deregister master node from zookeeper
